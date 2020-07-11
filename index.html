@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-    <title>Function to update map</title>
+    <title>Population density in metro.area TLV</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="stylesheet" href="css/leaflet.css">
     <script src="js/leaflet.js"></script>
@@ -10,28 +11,34 @@
             padding: 0;
             margin: 0;
         }
-        html, body, #map {
+
+        html,
+        body,
+        #map {
             height: 100%;
             width: 100%;
         }
-        #species_sel {
+
+        #ringsSelect {
             padding: 6px 8px;
             font: 14px/16px Arial, Helvetica, sans-serif;
-            background-color: rgba(255,255,255,0.8);
-            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            background-color: rgba(255, 255, 255, 0.8);
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
             border-radius: 5px;
         }
+
         .description {
             width: 350px;
             font-size: 14px;
             color: #333333;
             font-family: "Open Sans", Helvetica, sans-serif;
             padding: 10px 14px;
-            background-color: rgba(245,245,220,0.8) ;
-            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            background-color: rgba(245, 245, 220, 0.8);
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
             border-radius: 5px;
             border: 1px solid grey;
         }
+
         .description img {
             width: 200px;
             margin: auto;
@@ -39,119 +46,127 @@
         }
     </style>
 </head>
+
 <body>
     <div id="map"></div>
     <script>
-    function rings_color(d) {
-        if(d === "T.A.-YAFO") return "#202040"; else
-        if(d === "INNER RING") return "#543864"; else
-        if(d === "MIDDLE RING") return "#ff6363"; else
+
+        function createDescription() {
+
+            const description = L.control({ position: "bottomright" });
+            description.onAdd = function () {
+                const div = L.DomUtil.create("div", "description");
+                div.innerHTML =
+                    '<p><b>Population density in metro.area TLV</b></p><hr>' +
+                    '<p>This map shows the metropolitan area of TLV Divided into rings</p>' +
+                    'The following information were taken from:<br>' +
+                    '<p><ul>' +
+                    '<li>The Tel Aviv-Jaffa statistical yearbook of 2019</li>' +
+                    '<li>CBS, CENTRAL BUREAU OF STATISTICS</li>' +
+
+                    '<p><b>Selecting a ring of metro.area TLV will highlight the area selected<b><hr>' +
+                    'Created by: Valeria Chehovsky & Idan Gelfer</p><hr>' +
+                    '<img src="images/tlvlogo.png">';
+                return div;
+            };
+
+            description.addTo(map);
+
+        }
+
+        function shouldCreateDescription(){
+            return window.innerWidth >= 900
+        }
+
+        function rings_color(d) {
+            if (d === "T.A.-YAFO") return "#202040"; else
+                if (d === "INNER RING") return "#543864"; else
+                    if (d === "MIDDLE RING") return "#ff6363"; else
+
+                        return "#ffbd69";
+        }
+
+        function rings_style(feature) {
+            return {
+                fillColor: rings_color(feature.properties.type),
+                weight: 0.5,
+                opacity: 1,
+                fillOpacity: 0.7
+            };
+        }
+
+        const map = L.map("map").setView([32, 35], 8);
+
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 18,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        }).addTo(map);
+
+        // Define variables
+        let ringsLayer = L.layerGroup().addTo(map);
+        let url = "https://lera77.carto.com/api/v2/sql?";
+        let urlJSON = url + "q=";
+        let urlGeoJSON = url + "format=GeoJSON&q=";
+        let sqlQuery2 = "SELECT DISTINCT type FROM map ORDER BY type";
+
+        // Add empty dropdown menu
+        let dropdown = L.control({ position: "topleft" });
+        dropdown.onAdd = function () {
+            let div = L.DomUtil.create("div", "dropdown");
+            div.innerHTML = '<select id="ringsSelect"></select>';
+            L.DomEvent.disableClickPropagation(div);
+            return div;
+        };
+        dropdown.addTo(map);
         
-            return "#ffbd69";
-    }
 
-function rings_style(feature) {
-    return {
-        fillColor: rings_color(feature.properties.type),
-        weight: 0.5,
-        opacity: 1,
-        color: "purple",
-        fillOpacity: 0.7
-    };
-}
+        // Load species list
+        fetch(urlJSON + sqlQuery2)
+            .then(function (response) {
+                return response.json();
+            })
+            .then(function (data) {
+                let html = "";
+                data.rows.forEach(function (element) {
+                    html += "<option>" + element.type + "</option>";
+                });
+                document.getElementById("ringsSelect").innerHTML = html;
+                displayRings();
+            });
 
-const map = L.map("map").setView([32, 35], 8);
+        // Function to reload and display species observations
+        function displayRings() {
+            let valueSelected = document.getElementById("ringsSelect").value;
+            let sqlQuery3 = "SELECT DISTINCT * FROM map WHERE type = '" + valueSelected + "'";
+            fetch(urlGeoJSON + sqlQuery3)
+                .then(function (response) {
+                    return response.json();
+                })
+                .then(function (data) {
+                    ringsLayer.clearLayers();
+                    L.geoJSON(data, {
+                        style: rings_style,
+                        onEachFeature: function (feature, layer) {
+                            layer.bindPopup(
+                                '<div class="popup">' +
+                                feature.properties.type + '<br>' +
+                                '<b>' + feature.properties.pop_2017 + '</b>' +
+                                '</div>'
+                            );
+                        }
+                    }).addTo(ringsLayer);
+                });
+        }
 
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-}).addTo(map);
+        // Reload points on selection change
+        document
+            .getElementById("ringsSelect")
+            .addEventListener("change", displayRings);
 
-// Define variables
-let ringsLayer = L.layerGroup().addTo(map);
-let url = "https://lera77.carto.com/api/v2/sql?";
-let urlJSON = url + "q=";
-let urlGeoJSON = url + "format=GeoJSON&q=";
-let sqlQuery2 = "SELECT DISTINCT type FROM map ORDER BY type";
-
-// Add empty dropdown menu
-let dropdown = L.control({position: "topleft"});
-dropdown.onAdd = function() {
-    let div = L.DomUtil.create("div", "dropdown");
-    div.innerHTML = '<select id="species_sel"></select>';
-    return div;
-};
-dropdown.addTo(map);
-
-// Load species list
-fetch(urlJSON + sqlQuery2)
-    .then(function(response) {
-        return response.json();
-    })
-    .then(function(data) {
-        let html = "";
-        data.rows.forEach(function(element) {
-            html += "<option>" + element.type + "</option>";
-        });
-        document.getElementById("species_sel").innerHTML = html;
-        displaySpecies();
-    });
-
-// Function to reload and display species observations
-function displaySpecies() {
-    let valueSelected = document.getElementById("species_sel").value;
-    let sqlQuery3 = "SELECT DISTINCT * FROM map WHERE type = '" + valueSelected + "'";
-    fetch(urlGeoJSON + sqlQuery3)
-        .then(function(response) {
-            return response.json();
-        })
-        .then(function(data) {
-            ringsLayer.clearLayers();
-            L.geoJSON(data, {
-            style: rings_style,
-            onEachFeature: function(feature, layer) {
-                    layer.bindPopup(
-                        '<div class="popup">' + 
-                        feature.properties.type + '<br>' + 
-                        '<b>' + feature.properties.pop_2017 + '</b>' + 
-                        '</div>'
-                    );
-                }
-            }).addTo(ringsLayer);
-        });
-}
-
-// Reload points on selection change
-document
-    .getElementById("species_sel")
-    .addEventListener("change", displaySpecies);
-
-let description = L.control({position: "bottomright"});
-
-
-description.onAdd = function() {
-
-
-    let div = L.DomUtil.create("div", "description");
-    div.innerHTML = 
-        '<p><b>Population density in metro.area TLV</b></p><hr>' +
-        '<p>This map shows the metropolitan area of TLV Divided into rings</p>' +
-        'The following information were taken from:<br>' +
-        '<p><ul>' +
-        '<li>The Tel Aviv-Jaffa statistical yearbook of 2019</li>' +
-        '<li>CBS, CENTRAL BUREAU OF STATISTICS</li>' +
-      
-        '<p><b>Selecting a ring of metro.area TLV will highlight the area selected<b><hr>' +
-        'Created by: Valeria Chehovsky & Idan Gelfer</p><hr>' +
-        '<img src="images/tlvlogo.png">';
-
-
-    return div;
-
-};
-
-description.addTo(map);
-
+        if(shouldCreateDescription()){
+            createDescription();
+        }
     </script>
 </body>
+
 </html>
